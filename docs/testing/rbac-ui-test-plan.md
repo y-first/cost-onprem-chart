@@ -1,6 +1,6 @@
 # RBAC UI Test Plan — Cost Management On-Prem
 
-**Date**: 2026-05-21 (Updated: 2026-08-19)  
+**Date**: 2026-05-21 (Updated: 2026-09-01)  
 **Status**: Review  
 **Epic**: [COST-7570](https://redhat.atlassian.net/browse/COST-7570) — CoP Authentication & Authorization Migration  
 **Story**: [COST-7632](https://redhat.atlassian.net/browse/COST-7632) — RBAC UI  
@@ -11,14 +11,43 @@
 
 ## Document Summary
 
-**Total test cases**: 130+ (across 13 UI categories: A–K, M–N; performance mapped to existing COST-7643)
+This is the **RBAC UI** test plan. Every case is tagged **UI**, **API**, or **Infra**. API and Cost-shell login/logout that already exist under `tests/` are **mappings only** — do not re-implement them as Playwright IAM cases.
+
+| Layer | Meaning | Execute here? |
+|-------|---------|---------------|
+| **UI** | Browser (manual or Playwright): chrome, routes, MFE, tables, toasts | **Yes** — remaining IDs below |
+| **API** | HTTP to gateway / Keycloak / insights-rbac; no browser | **No** — run existing pytest |
+| **Infra** | Chart ConfigMap, nginx, Jobs, pods (not user-facing) | Only if not already covered by helm/gateway tests |
+
+**Total UI/Infra cases owned by this plan**: counted in the table below. API mappings (I, L, H-01–H-05, H-09, B-06, N-03–N-05, N-07, A-01, A-05) are **not** counted.
+
+| Category | IDs | Layer | Count |
+|----------|-----|-------|-------|
+| A Auth & session | A-02–A-04 | UI | 3 |
+| B MFE / infra | B-01–B-05, B-07–B-08 | UI + Infra (B-01, B-03) | 7 |
+| C Navigation | C-01–C-10b, C-12–C-14 (no C-11) | UI | 23 |
+| D Groups | D-01–D-14 | UI | 14 |
+| E Users | E-01–E-11 | UI | 11 |
+| F Roles | F-01, F-03–F-08 (no F-02) | UI | 7 |
+| G My User Access | G-01–G-06, G-08 (no G-07) | UI | 7 |
+| H Enforcement | H-06–H-08, H-10–H-11 | UI | 5 |
+| J Negative / resilience | J-01–J-03, J-05–J-11 (no J-04, J-12) | UI | 10 |
+| K On-prem UX | K-01, K-04, K-06 | UI | 3 |
+| N Security | N-01–N-02, N-06, N-08 | UI | 4 |
+| **This-plan total** | | | **94** |
+| of which **UI** | | | **92** |
+| of which **Infra** | B-01, B-03 | | **2** |
+
+**Not counted — API already in `tests/`**: A-01 (Cost login UI), A-05, B-06, H-01–H-05, H-09, I-01–I-13, L/PERF-RBAC-*, N-03–N-05, N-07.
+
+**Not counted — folded into another UI ID**: C-11→G-05, F-02→F-01/C-05, G-07→J-10, J-04→D-12, J-12→E-04, K-02→E-05, K-03→C-08, K-05→E-11. **N/A**: H-12.
+
+**Priority** (rows with a Pri column; K has none): **54 P0**, **28 P1**, **9 P2**.
 
 **Test coverage**:
-- **7 strategy layers**: Static delivery → API → UI nav → CRUD → enforcement → security → accessibility
-- **90+ functional test cases** (A–K): Auth, infra, navigation, Groups/Users/Roles/My User Access, enforcement, error handling, UX gaps
-- **RBAC performance**: already covered by [COST-7643](https://redhat.atlassian.net/browse/COST-7643) (`tests/suites/performance/test_rbac_perf.py`); not duplicated here
-- **8 accessibility tests** (M): WCAG 2.1 AA keyboard nav, screen readers, color contrast
-- **8 security tests** (N): XSS, CSRF, clickjacking, URL injection, session fixation
+- **92 UI** cases this plan executes (browser)
+- **2 Infra** cases (nginx `/rbac/` + plugin-manifest)
+- **API** enforcement, gateway, JWT, and RBAC perf stay in `tests/suites/auth/`, `tests/suites/e2e/test_rbac_access.py`, `tests/suites/performance/test_rbac_perf.py`
 
 **Key UI behaviors (on-prem)**:
 - IAM in the **Global** sidebar as expandable **Identity and Access Management** with **Users / Roles / Groups** only (no IAM Overview in sidebar)
@@ -30,9 +59,8 @@
 - Skeleton loading states on all IAM list pages during API fetch
 
 **Key additions from senior QE review** (2026-06-03):
-- State synchronization tests (D-11, E-07, H-08–H-12) for bidirectional IAM ↔ Cost integration
-- Accessibility compliance (M-*) for WCAG 2.1 AA
-- UI-layer security tests (N-*) for XSS/CSRF/clickjacking
+- State synchronization tests (D-11, E-07, H-08, H-10–H-11) for bidirectional IAM ↔ Cost integration
+- UI-layer security tests (N-01, N-02, N-06, N-08) for XSS / search injection / session cookie
 - Risk assessment & mitigation matrix
 - Test data management strategy with cleanup scripts
 - Acceptance criteria → test case traceability
@@ -56,14 +84,14 @@ Federated IAM/RBAC UI embedded in `koku-ui-onprem` (Scalprum MFE), served from `
 | [FLPATH-3551](https://redhat.atlassian.net/browse/FLPATH-3551) / [COST-7571](https://redhat.atlassian.net/browse/COST-7571) | Parent test plans |
 | [PR #175](https://github.com/insights-onprem/cost-onprem-chart/pull/175) | Nginx `location /rbac/` |
 | [PR #173](https://github.com/insights-onprem/cost-onprem-chart/pull/173) | Gateway JWT + IAM API automation |
-| Lab (ocp-edge122) | Routes, personas, groups/users observed live |
+| Lab (`rbac-test.qe.lab.redhat.com`) | Live UI + `/api/rbac/v1/` reviewed 2026-08-27 |
 
 ### IAM route map
 
 | Surface | URL pattern | Notes |
 |---------|-------------|-------|
 | My User Access | `/iam/my-user-access?bundle={openshift\|settings}` | Entry via masthead **user menu**; not in IAM sidebar; **no RHEL bundle** on-prem |
-| Users list | `/iam/user-access/users` | Default filter chip: `Status: Active` |
+| Users list | `/iam/user-access/users` | Default chip `Active` is present; lab principals currently render as **Inactive** (chip does not hide them) |
 | User detail | `/iam/user-access/users/detail/{username}` | Username-based, not UUID |
 | Invalid user | `/iam/user-access/users/detail/{username}` | Breadcrumb: `Users > Invalid user` |
 | Roles list | `/iam/user-access/roles` | **Create role** button in toolbar |
@@ -107,7 +135,7 @@ The masthead user control displays the authenticated identity (username / email 
 ## 1. Objectives
 
 1. Verify the RBAC MFE loads reliably inside the Cost shell without a second hostname or re-authentication.
-2. Verify all IAM surfaces (Overview, My User Access, Users, Roles, Groups) render and function against `/api/rbac/v1/`.
+2. Verify all IAM surfaces (My User Access, Users, Roles, Groups) render and function against `/api/rbac/v1/`. There is **no** IAM Overview page.
 3. Verify on-prem UX constraints: no SaaS-only flows (e.g. Invite Users), IDP-managed users, group-centric permissions.
 4. Verify RBAC enforcement is reflected in UI (personas see appropriate data/actions).
 5. Provide regression coverage for MFE asset delivery (`/rbac/`), routing (`/iam/*`), and gateway auth.
@@ -119,10 +147,13 @@ The masthead user control displays the authenticated identity (username / email 
 - Full LDAP/AD federation setup (covered by [COST-7601](https://redhat.atlassian.net/browse/COST-7601) unless UI-specific).
 - insights-rbac backend-only Django shell administration.
 - Cost report data correctness (covered by existing Koku e2e; cross-check only where RBAC affects visibility).
-- Playwright UI harness flakiness on lab hosts without system deps (track separately).
 - Multi-cluster federation scenarios (future work).
 - Mobile/tablet responsive UI testing (desktop browsers only).
-- RBAC authorization performance (latency, cache, concurrency, multi-org, replica scaling, ingestion load) — covered by [COST-7643](https://redhat.atlassian.net/browse/COST-7643) / `tests/suites/performance/test_rbac_perf.py`.
+- Accessibility / WCAG compliance (keyboard nav, screen readers, color contrast, axe).
+- Generic Cost UI login/logout/session (Keycloak redirect, valid/invalid credentials, Cost-only session persist, `/logout`, back-button, oauth2-proxy cookie) — already in `tests/suites/ui/test_login_flow.py` and `tests/suites/ui/test_logout_flow.py` (**UI**, Cost shell — not IAM).
+- Gateway JWT / RBAC API authz (401/403, fail-closed, org_id, revocation, IAM reader) — already in `tests/suites/auth/test_rbac_gateway.py` and `tests/suites/auth/test_gateway_auth.py` (**API**).
+- Persona cost-report isolation — already in `tests/suites/e2e/test_rbac_access.py` (**API**).
+- RBAC authorization performance (latency, cache, concurrency, multi-org, replica scaling, ingestion load) — covered by [COST-7643](https://redhat.atlassian.net/browse/COST-7643) / `tests/suites/performance/test_rbac_perf.py` (**API**).
 
 ---
 
@@ -132,15 +163,14 @@ The masthead user control displays the authenticated identity (username / email 
 |-------------|--------|
 | **Cluster** | CoP deployed (`cost-onprem` ns), gateway + UI + Keycloak + insights-rbac |
 | **Keycloak** | `deploy-rhbk.sh`; `roles` client scope on `cost-management-ui`; realm `kubernetes` |
-| **UI image** | `koku-ui-onprem` with RBAC MFE baked in (e.g. jkilzi POC image) |
-| **Chart** | PR #175 nginx `/rbac/` block applied |
+| **UI image** | `koku-ui-onprem` with RBAC MFE baked in (`/rbac/plugin-manifest.json` → `insightsRbac`) |
+| **Chart** | nginx `location /rbac/` in `cost-onprem/templates/ui/nginx-config.yaml` (PR #175) |
 | **DNS/hosts** | `cost-onprem-ui-cost-onprem.apps.<cluster>` → ingress IP |
-| **Test users** | Personas from Section 4, mapped to Keycloak users per environment (see `tests/fixtures/rbac-seed.yaml`); usernames are **not fixed** across dev vs cluster. New users: follow **§13 User provisioning** |
-| **RBAC seed data** | Groups: CI Test Admin, Default access, Gateway RBAC IAM Readers, RBAC Payment Team, RBAC Cluster Alpha Ops, RBAC Cost Admins (+ chart/e2e bootstrap) |
+| **Test users** | Personas from Section 4, mapped to Keycloak users per environment (`tests/rbac_keycloak_users.py` + e2e bootstrap). Usernames are **not fixed** across dev vs cluster. New users: follow **§13 User provisioning** |
+| **RBAC seed data** | Groups on lab: CI Test Admin, Cost Admin Default, Default access, Gateway RBAC IAM Readers, RBAC Payment Team, RBAC Cluster Alpha Ops, RBAC Cost Admins (`tests/rbac_bootstrap_scripts.py` + `tests/suites/e2e/test_rbac_access.py`) |
 | **Wait policy** | **≥ 3–5 s** after IAM route change before asserting content (MFE lazy-load) |
 | **Browser matrix** | Chrome 120+, Firefox 115+, Edge 120+ (primary testing on Chrome) |
-| **Seed data version** | Documented in `tests/fixtures/rbac-seed.yaml` |
-| **Cleanup script** | `./scripts/reset-rbac-test-data.sh` (removes TEST-* prefixed groups/roles) |
+| **Seed data version** | Chart/e2e bootstrap scripts (no `rbac-seed.yaml` in-repo) |
 
 ---
 
@@ -163,24 +193,43 @@ Test steps use **personas** (roles/capabilities), not environment-specific Keycl
 - Reference personas by name from the table above (e.g. **admin**, **alice**, **viewer**).
 - The UI header, profile menu, and `/users/detail/{username}` URLs must match the **actual username** of the logged-in persona for that run.
 - Do **not** assume `dev-user` or any other fixed username unless the persona is explicitly named in the step.
-- Map personas to Keycloak credentials per environment (chart bootstrap, `rbac-seed.yaml`, lab Keycloak); record the mapping in test run notes.
+- Map personas to Keycloak credentials per environment (chart bootstrap, `tests/rbac_keycloak_users.py`, lab Keycloak); record the mapping in test run notes.
 - Usernames vary by environment — map personas to Keycloak credentials in test run notes.
 
 ---
 
 ## 5. Test strategy layers
 
-| Layer | Tooling | Purpose |
-|-------|---------|---------|
-| **L1 — Static/MFE delivery** | curl, browser DevTools | `/rbac/plugin-manifest.json`, chunks 200 |
-| **L2 — API/gateway** | chart pytest `test_rbac_gateway.py`, PR #173 | JWT → `/api/rbac/v1/*` authz |
-| **L3 — UI navigation & render** | Manual + Playwright | Shell ↔ IAM routing, sidebar |
-| **L4 — IAM functional CRUD** | Manual + future UI automation | Groups/Roles/Users workflows |
-| **L5 — RBAC enforcement E2E** | `test_rbac_access.py` gateway JWT tests | Persona isolation through UI/API |
-| **L6 — Negative/security** | Manual + gateway security tests | Unauth, expired JWT, org_id boundaries, XSS/CSRF |
-| **L7 — Accessibility** | Manual WCAG 2.1 AA testing + axe DevTools | Keyboard nav, screen readers, color contrast |
+| Layer | Kind | Tooling | Purpose |
+|-------|------|---------|---------|
+| **L1 — Static/MFE delivery** | Infra / UI | curl, ConfigMap, DevTools | `/rbac/plugin-manifest.json`, chunks 200 |
+| **L2 — API/gateway** | **API** | `tests/suites/auth/test_rbac_gateway.py` | JWT → `/api/rbac/v1/*` authz. **Not UI.** |
+| **L3 — UI navigation & render** | **UI** | Manual + Playwright | Shell ↔ IAM routing, sidebar |
+| **L4 — IAM functional CRUD** | **UI** | Manual + future `test_rbac_iam.py` | Groups/Roles/Users workflows |
+| **L5 — RBAC enforcement** | **API** (mapped) + **UI** remainder | `test_rbac_access.py` for cost scope; UI only for chrome/workflows | Persona isolation is API; UI checks empty/denied **pages** only where called out |
+| **L6 — Negative/security** | **UI** error chrome; **API** fail-closed / JWT | Manual UI + gateway tests | Do not re-test API 401/403 in the browser |
 
-RBAC authorization performance is **not** a UI-plan layer. It is already automated in `tests/suites/performance/test_rbac_perf.py` (COST-7643). See Section L mapping.
+RBAC authorization performance is **API**, not UI. It is already automated in `tests/suites/performance/test_rbac_perf.py` (COST-7643). See Section L.
+
+### Existing `tests/` coverage (do not duplicate)
+
+| Path | Layer | This plan |
+|------|-------|-----------|
+| `tests/suites/ui/test_login_flow.py` | UI | A-01, Cost session persist — mapped |
+| `tests/suites/ui/test_logout_flow.py` | UI | Cost logout / back button / cookie — mapped (A-03 Cost half) |
+| `tests/suites/ui/test_navigation.py` | UI | Cost Overview/OCP/Explorer/Settings only. Selector convention = C-14. **No IAM pages.** |
+| `tests/suites/ui/test_data_validation.py`, `test_optimizations.py`, `test_sources.py` | UI | Cost data / sources — **out of scope** |
+| `tests/suites/auth/test_rbac_gateway.py` | API | Section I; H-04 / H-05 / H-09; J-01 API half |
+| `tests/suites/auth/test_gateway_auth.py` | API | JWT 401/200 on ingress/koku status — not IAM chrome |
+| `tests/suites/auth/test_ui_oauth.py` | API | Password-grant JWT claims + `org-admin` realm role — not masthead |
+| `tests/suites/auth/test_org_admin_identity.py` | API | `GET /rbac/v1/access/` permissions — not G-01 badge |
+| `tests/suites/auth/test_keycloak.py` | API | OIDC discovery / token shape |
+| `tests/suites/e2e/test_rbac_access.py` | API | H-01–H-04 persona cost scope |
+| `tests/suites/performance/test_rbac_perf.py` | API | Section L / COST-7643 |
+| `tests/suites/helm/*` | Infra | Keycloak-sync CronJob, rbac-api Valkey env — not IAM MFE |
+| `tests/suites/api/*`, `cost_management/*`, `infrastructure/*`, `ros/*`, `interpod/*` | API / Infra | Cost pipeline — **out of scope** |
+
+There is **no** `tests/suites/ui/test_rbac_iam.py`. That is the remaining UI automation gap.
 
 ---
 
@@ -188,182 +237,209 @@ RBAC authorization performance is **not** a UI-plan layer. It is already automat
 
 ### A. Authentication & session (RBAC-UI-AUTH)
 
-| ID | Title | Steps | Expected | Pri | Type |
-|----|-------|-------|----------|-----|------|
-| A-01 | Unauthenticated UI redirect | Open UI URL logged out | 302 → Keycloak login; no IAM content without auth | P0 | Auto/M |
-| A-02 | Single session across Cost ↔ IAM | Login as **admin** persona → Cost Overview → IAM → Groups → Cost Overview | No second login; same user in header as logged-in persona | P0 | M |
-| A-03 | Logout invalidates IAM | Logout from UI → (1) browser back button, (2) UI breadcrumb, (3) direct URL `/iam/user-access/groups` | All three redirect to login; no cached IAM data | P1 | M |
-| A-04 | Viewer vs admin header identity | Login as **viewer** / **admin** personas | Header shows correct username/email for each logged-in persona | P2 | M |
-| A-05 | Session timeout handling | Wait for Keycloak session timeout → click IAM link | Redirect to login; graceful re-auth without data loss | P1 | M |
+Generic Cost UI login, unauthenticated redirect, Cost-only session persistence, and logout are already automated. Do **not** re-implement them as RBAC UI cases.
+
+| Existing ID | Automated test | Coverage |
+|-------------|----------------|----------|
+| A-01 | `test_ui_redirects_to_keycloak` (`test_login_flow.py`) | Unauthenticated `ui_url` → Keycloak login form. oauth2-proxy wraps the whole UI host, so an unauthenticated `/iam/*` paste is the same redirect — not a separate case. Also: `test_successful_login`, `test_invalid_credentials_shows_error` |
+| — | `test_session_persists_across_navigation`, `test_can_access_protected_routes` | Cost-only session (root URL and `/recommendations`). Does **not** cover Cost ↔ IAM |
+| A-03 (Cost) | `test_logout_flow.py` | `/logout` → Keycloak; session invalidated on root URL; back button; `_oauth2_proxy` cookie cleared; unauthenticated/double logout |
+| A-05 | **J-03** (browser) + **I-05** `test_expired_jwt_rejected` (API) | Idle Keycloak timeout in the UI is J-03. Forged/expired JWT at the gateway is I-05. No third A case |
+| — | `test_ui_oauth.py`, `test_org_admin_identity.py` | Admin vs viewer **JWT** `org-admin` role — not masthead username chrome |
+
+Remaining IAM-specific cases (all **UI**; not covered above):
+
+| ID | Title | Steps | Expected | Pri | Layer |
+|----|-------|-------|----------|-----|-------|
+| A-02 | Single session across Cost ↔ IAM | Login as **admin** persona → Cost Overview → expand IAM → Groups → Cost Overview | No second login; same user in header as logged-in persona. C-09 covers nav freeze only; this case is **no re-auth** (COST-7654 AC-6) | P0 | UI |
+| A-03 | Logout invalidates IAM deep-link | Logout (user menu or `/logout`) → paste `/iam/user-access/groups` | Redirect to Keycloak login; no cached IAM table. Back-button and root-URL post-logout already in `test_logout_flow.py` — do not re-test those | P1 | UI |
+| A-04 | Viewer vs admin header identity | Login as **viewer** then **admin** personas (separate sessions) | Masthead shows the correct username/email for each persona. C-02b is the admin chrome existence check only | P2 | UI |
 
 ### B. MFE delivery & infrastructure (RBAC-UI-INFRA)
 
-| ID | Title | Steps | Expected | Pri | Type |
-|----|-------|-------|----------|-----|------|
-| B-01 | plugin-manifest served | `GET /rbac/plugin-manifest.json` (authenticated session or from pod) | 200; `name: insightsRbac`, `baseURL: /rbac/`, `loadScripts` includes `plugin-entry.js` | P0 | Auto |
-| B-02 | MFE entry script loads | DevTools Network: load IAM page | `plugin-entry.js` + federated chunks 200, no 404 | P0 | M |
-| B-03 | Nginx `/rbac/` alias | Verify ConfigMap `location /rbac/` | alias `/opt/app-root/src/rbac/`; sample bundle 200 from pod | P0 | Auto |
-| B-04 | No second UI route required | Confirm only `cost-onprem-ui` route used for IAM | IAM works on same hostname (COST-7654 AC) | P0 | M |
-| B-05 | API same origin | DevTools: IAM page XHR/fetch | Calls go to `/api/rbac/v1/...` (via UI proxy/gateway), not external SaaS; validate against OpenAPI schema | P0 | M |
-| B-06 | RBAC API health | `GET /api/rbac/v1/status/` with valid JWT | 200 | P0 | Auto (PR #173) |
-| B-07 | MFE load timing | Navigate to Groups; snapshot at 0s, 2s, 5s | Content visible by ≤5s under normal load; fail if >10s (p95); record observed time in run notes | P0 | M |
-| B-08 | Browser resource consumption | DevTools Performance: load IAM → Groups → Users → Roles | Memory <500MB, CPU <80% sustained, no memory leaks on 10 navigation cycles | P2 | M |
+B-06 is **API** (`GET /rbac/v1/status/` unauthenticated 401 is I-01; authenticated 200 is gateway smoke in `test_gateway_auth.py` / `test_rbac_gateway.py`). Do not add a UI case for API health.
+
+| ID | Title | Steps | Expected | Pri | Layer |
+|----|-------|-------|----------|-----|-------|
+| B-01 | plugin-manifest served | `GET /rbac/plugin-manifest.json` (authenticated session or from pod) | 200; `name: insightsRbac`, `baseURL: /rbac/`, `loadScripts` includes `plugin-entry.js` | P0 | Infra |
+| B-02 | MFE entry script loads | DevTools Network: load IAM page | `plugin-entry.js` + federated chunks 200, no 404 | P0 | UI |
+| B-03 | Nginx `/rbac/` alias | Verify ConfigMap `location /rbac/` | alias `/opt/app-root/src/rbac/`; sample bundle 200 from pod. Also `X-Frame-Options SAMEORIGIN` (N-04) | P0 | Infra |
+| B-04 | No second UI route required | Confirm only `cost-onprem-ui` route used for IAM | IAM works on same hostname (COST-7654 AC) | P0 | UI |
+| B-05 | API same origin | DevTools: IAM page XHR/fetch | Calls go to `/api/rbac/v1/...` (via UI proxy/gateway), not external SaaS | P0 | UI |
+| B-07 | MFE load timing | Navigate to Groups; snapshot at 0s, 2s, 5s | Content visible by ≤5s under normal load; fail if >10s (p95); record observed time in run notes | P0 | UI |
+| B-08 | Browser resource consumption | DevTools Performance: load IAM → Groups → Users → Roles | Memory <500MB, CPU <80% sustained, no memory leaks on 10 navigation cycles | P2 | UI |
 
 ### C. Navigation & routing (RBAC-UI-NAV)
 
-| ID | Title | Steps | Expected | Pri | Type |
-|----|-------|-------|----------|-----|------|
-| C-01 | IAM expandable label in Global nav | Login as **admin**; open Cost Overview; inspect Global sidebar | Expandable labeled **Identity and Access Management** is visible in `nav[aria-label="Global"]` (top-level item alongside Overview/Settings); **not** nested under Cost **Settings** | P0 | M/Auto |
-| C-01a | Expand IAM section | Click **Identity and Access Management** expandable toggle | Section expands; nested subnav shows exactly **Users**, **Roles**, **Groups** (no Overview / My User Access in subnav) | P0 | M/Auto |
-| C-01b | Collapse IAM section | With IAM expanded, click expandable toggle again | Subnav hides; Users/Roles/Groups links not visible; expandable still present | P1 | M/Auto |
-| C-02 | Route: My User Access via user menu | Open masthead **user menu** → click **My User Access** (or deep-link `/iam/my-user-access`); wait 4s | URL `/iam/my-user-access*`; heading "My User Access"; **Org. Administrator** badge if applicable; exactly **two** bundle cards: OpenShift, Settings and User Access | P0 | M/Auto |
-| C-02a | My User Access not in IAM expandable | Expand **Identity and Access Management** | Subnav does **not** include My User Access; item is only in the user menu (above Logout) | P0 | M/Auto |
-| C-02b | Masthead shows logged-in identity | Login as **admin** (or any persona); inspect upper-right masthead | User control visible with authenticated identity text (e.g. `admin@cost-onprem-chart.test` / `user@…`); control is clickable | P0 | M/Auto |
-| C-02c | User menu contents | Click masthead user control | Dropdown opens with exactly **My User Access** then **Logout** (in that order); no Users / Roles / Groups entries | P0 | M/Auto |
-| C-02d | Users/Roles/Groups are sidebar-only | Open user menu; also expand IAM sidebar | Users / Roles / Groups appear **only** under Identity and Access Management expandable; **absent** from user menu | P0 | M/Auto |
-| C-02e | Logout still available from user menu | Open user menu → confirm **Logout** | Logout item visible below My User Access; selecting it ends session (see A-03) | P0 | M/Auto |
-| C-03 | Route: Groups via expandable | Expand IAM → click **Groups**; wait 4s | URL `/iam/user-access/groups`; table columns **Name**, **Roles**, **Members**, **Last modified**; **Create group** button; **Groups** nav link marked current | P0 | M/Auto |
-| C-04 | Route: Users via expandable | Expand IAM → click **Users**; wait 4s | URL `/iam/user-access/users`; columns Org. Administrator, Username, Email, First name, Last name, Status; default **Status: Active** filter chip; **Users** nav link marked current | P0 | M/Auto |
-| C-05 | Route: Roles via expandable | Expand IAM → click **Roles**; wait 4s | URL `/iam/user-access/roles`; columns Name, Description, Groups, Permissions, Last modified; **Create role** button; **Roles** nav link marked current | P0 | M/Auto |
-| C-05a | IAM subnav persists across leaf pages | Expand IAM → Users → Roles → Groups | Expandable stays expanded; all three leaf links remain available without re-expanding | P1 | M/Auto |
-| C-06 | Bundle: OpenShift | My User Access → select **OpenShift** card | URL `?bundle=openshift`; heading "Your OpenShift roles"; roles include Cost Administrator, Cost * Viewer Local Test | P0 | M |
-| C-07 | Bundle: Settings | My User Access → select **Settings and User Access** card | URL `?bundle=settings`; heading "Your Settings and User Access roles"; roles include Sources administrator, User Access administrator | P0 | M |
-| C-08 | No RHEL bundle (on-prem) | My User Access page; attempt `?bundle=rhel` | Only OpenShift and Settings cards shown; no RHEL card; unsupported bundle handled gracefully (redirect or empty state) | P0 | M |
-| C-09 | Cost → IAM → Cost | Overview → expand IAM → Groups → OpenShift Costs | No nav freeze (max 2s delay); no JS console errors; shell responsive; Cost nav still usable | P0 | Auto (Playwright) |
-| C-10 | Deep link Groups | Paste `/iam/user-access/groups` while logged in | Page loads with group table after wait; IAM expandable shows expanded with Groups current | P1 | M |
-| C-10a | Deep link Users | Paste `/iam/user-access/users` while logged in | Users list loads; IAM expandable expanded; **Users** marked current | P1 | M |
-| C-10b | Deep link Roles | Paste `/iam/user-access/roles` while logged in | Roles list loads; IAM expandable expanded; **Roles** marked current | P1 | M |
-| C-11 | Expand role permissions | My User Access → expand a role row (e.g. Cost Cloud Viewer Local Test) | Nested table: Application, Resource type, Operation, Resource definitions | P0 | M |
-| C-12 | Invalid IAM route | Navigate `/iam/nonexistent` | Graceful 404 or redirect, no white-screen crash | P2 | M |
-| C-13 | Browser back/forward | Navigate Groups → Users → back → forward | Correct page state restored | P2 | M |
-| C-14 | Primary vs IAM nav selectors | While on Overview with IAM expanded | Primary list (`nav[aria-label="Global"] > ul.pf-v6-c-nav__list`) and IAM subnav (`section.pf-v6-c-nav__subnav > ul.pf-v6-c-nav__list`) are distinct; automation must not use bare `ul.pf-v6-c-nav__list` | P0 | Auto (Playwright) |
+All rows are **UI**. Expand-role-permissions (former C-11) is **G-05** — do not duplicate. Bundle **role content** is G-02/G-03; C-06/C-07 only assert URL + heading. Cost-page nav is `test_navigation.py` — do not re-test Overview/OCP/Explorer here.
+
+| ID | Title | Steps | Expected | Pri | Layer |
+|----|-------|-------|----------|-----|-------|
+| C-01 | IAM expandable label in Global nav | Login as **admin**; open Cost Overview; inspect Global sidebar | Expandable labeled **Identity and Access Management** is visible in `nav[aria-label="Global"]` (top-level item alongside Overview/Settings); **not** nested under Cost **Settings** | P0 | UI |
+| C-01a | Expand IAM section | Click **Identity and Access Management** expandable toggle | Section expands; nested subnav shows exactly **Users**, **Roles**, **Groups** (no Overview / My User Access in subnav) | P0 | UI |
+| C-01b | Collapse IAM section | With IAM expanded, click expandable toggle again | Subnav hides; Users/Roles/Groups links not visible; expandable still present | P1 | UI |
+| C-02 | Route: My User Access via user menu | Open masthead **user menu** → click **My User Access**; wait 4s | URL `/iam/my-user-access?bundle=openshift`; heading "My User Access"; settles on OpenShift. Badge/cards/roles: G-01, G-04, G-02 | P0 | UI |
+| C-02a | My User Access not in IAM expandable | Expand **Identity and Access Management** | Subnav does **not** include My User Access; item is only in the user menu (above Logout) | P0 | UI |
+| C-02b | Masthead shows logged-in identity | Login as **admin** (or any persona); inspect upper-right masthead | User control visible with authenticated identity text (e.g. `admin@cost-onprem-chart.test` / `user@…`); control is clickable | P0 | UI |
+| C-02c | User menu contents | Click masthead user control | Dropdown opens with exactly **My User Access** then **Logout** (in that order); no Users / Roles / Groups entries | P0 | UI |
+| C-02d | Users/Roles/Groups are sidebar-only | Open user menu; also expand IAM sidebar | Users / Roles / Groups appear **only** under Identity and Access Management expandable; **absent** from user menu | P0 | UI |
+| C-02e | Logout still available from user menu | Open user menu → confirm **Logout** | Logout **item visible** below My User Access. Session teardown is A-03 + `test_logout_flow.py` — this row is chrome only | P0 | UI |
+| C-03 | Route: Groups via expandable | Expand IAM → click **Groups**; wait 4s | URL `/iam/user-access/groups`; table columns **Select**, **Name**, **Roles**, **Members**, **Last modified**, **Actions**; **Create group** button; **Filter by name**. Group **data** is D-01 | P0 | UI |
+| C-04 | Route: Users via expandable | Expand IAM → click **Users**; wait 4s | URL `/iam/user-access/users`; columns Org. Administrator, Username, Email, First name, Last name, Status. Invite-user absence is E-05; list **data** is E-01 | P0 | UI |
+| C-05 | Route: Roles via expandable | Expand IAM → click **Roles**; wait 4s | URL `/iam/user-access/roles`; columns Select, Name, Description, Groups, Permissions, Last modified, Actions; **Create role** button. Role **data** is F-01 | P0 | UI |
+| C-05a | IAM subnav persists across leaf pages | Expand IAM → Users → Roles → Groups | Expandable stays expanded; all three leaf links remain available without re-expanding | P1 | UI |
+| C-06 | Bundle: OpenShift route | My User Access → select **OpenShift** card | URL `?bundle=openshift`; heading "Your OpenShift roles". Which roles appear: **G-02** | P0 | UI |
+| C-07 | Bundle: Settings route | My User Access → select **Settings and User Access** card | URL `?bundle=settings`; heading "Your Settings and User Access roles". Which roles appear: **G-03** | P0 | UI |
+| C-08 | No RHEL card; unparameterized deep link | (1) User menu → My User Access. (2) Paste `/iam/my-user-access` with **no** query. (3) Paste `?bundle=rhel` | (1) Default entry is **OpenShift**. (2–3) **No RHEL card**. Bare URL still hydrates SaaS leftover "Your Red Hat Enterprise Linux roles" (COST-8160). Absorbs former K-03 | P0 | UI |
+| C-09 | Cost → IAM → Cost | Overview → expand IAM → Groups → OpenShift Costs | No nav freeze (max 2s delay); no JS console errors; shell responsive. **No re-auth** is A-02 | P0 | UI |
+| C-10 | Deep link Groups | Paste `/iam/user-access/groups` while logged in | Page loads with group table after wait; IAM expandable expanded | P1 | UI |
+| C-10a | Deep link Users | Paste `/iam/user-access/users` while logged in | Users list loads; IAM expandable expanded | P1 | UI |
+| C-10b | Deep link Roles | Paste `/iam/user-access/roles` while logged in | Roles list loads; IAM expandable expanded | P1 | UI |
+| C-12 | Invalid IAM route | Navigate `/iam/nonexistent` | Graceful 404 or redirect, no white-screen crash | P2 | UI |
+| C-13 | Browser back/forward | Navigate Groups → Users → back → forward | Correct page state restored | P2 | UI |
+| C-14 | Primary vs IAM nav selectors | While on Overview with IAM expanded | Primary list (`nav[aria-label="Global"] > ul.pf-v6-c-nav__list`) and IAM subnav (`section.pf-v6-c-nav__subnav > ul.pf-v6-c-nav__list`) are distinct. Already used in `test_navigation.py` — keep as IAM automation constraint | P0 | UI |
 
 ### D. Groups (RBAC-UI-GRP)
 
-| ID | Title | Steps | Expected | Pri | Type |
-|----|-------|-------|----------|-----|------|
-| D-01 | List groups | Admin → Groups | Shows **Cost Admin Default** (6 roles, Members: All org admins) and **Default access** (7 roles, Members: All); Name column has info icon | P0 | M |
-| D-02 | Group detail — Roles tab | Click **Cost Admin Default** | URL `/iam/user-access/groups/detail/{uuid}/roles`; breadcrumbs `Groups > Cost Admin Default`; description visible; **Roles** tab active | P0 | M |
-| D-03 | Group detail — Members tab | Group detail → click **Members** tab | URL `/iam/user-access/groups/detail/{uuid}/members`; member list loads | P0 | M |
-| D-04 | Group role drill-down | Group Roles tab → click **Cost Administrator** | URL `.../groups/detail/{uuid}/roles/detail/{roleUuid}`; permissions table: Application, Resource type, Operation, Resource definitions, Last modified | P0 | M |
-| D-05 | Create group | Admin → **Create group** → name + description → save | Success toast; group appears in list | P0 | M |
-| D-06 | Edit group | Edit existing test group description | Persists after refresh | P1 | M |
-| D-07 | Add member to group | Add **alice** persona to a test group via Members tab | Member count updates; alice's effective permissions change | P0 | M |
-| D-08 | Remove member | Remove member from test group | Reflected in list and in Cost report scope for that user | P0 | M |
-| D-09 | Assign role to group | Attach Cost role to group via UI | Role count updates on list page; `/api/rbac/v1/access/` reflects change | P0 | M |
-| D-10 | Delete group (non-system) | Delete a user-created test group | Removed from list; API 404 | P1 | M |
-| D-11 | Platform default group | View **Default access** | Visible; Members = "All"; destructive actions restricted or warned | P1 | M |
-| D-12 | Non-admin denied create | Login as **viewer** persona → Groups | Create group hidden or POST returns 403 | P0 | M |
-| D-13 | Filter groups by name | Enter name in **Filter by name** | Table narrows to matching groups | P1 | M |
-| D-14 | Roles count link | Click role count (e.g. "6") on group row | Navigates to group Roles tab | P1 | M |
+All rows are **UI**. Viewer-cannot-create (D-12) absorbs former **J-04**. Do not re-test gateway `POST /rbac/v1/groups/` 403 (that is H-05 / I-04 **API**).
+
+| ID | Title | Steps | Expected | Pri | Layer |
+|----|-------|-------|----------|-----|-------|
+| D-01 | List groups | Admin → Groups | Shows **Cost Admin Default** (1 role, Members: All org admins, info icon) and **Default access** (6 roles, Members: All, info icon); also CI Test Admin, Gateway RBAC IAM Readers, RBAC Cluster Alpha Ops, RBAC Cost Admins, RBAC Payment Team | P0 | UI |
+| D-02 | Group detail — Roles tab | Click **Cost Admin Default** | URL `/iam/user-access/groups/detail/{uuid}/roles`; breadcrumbs `Groups > Cost Admin Default`; description visible; **Roles** tab active | P0 | UI |
+| D-03 | Group detail — Members tab | Group detail → click **Members** tab | URL `/iam/user-access/groups/detail/{uuid}/members`; member list loads | P0 | UI |
+| D-04 | Group role drill-down | Group Roles tab → click **Cost Administrator** | URL `.../groups/detail/{uuid}/roles/detail/{roleUuid}`; permissions table: Application, Resource type, Operation, Resource definitions, Last modified | P0 | UI |
+| D-05 | Create group | Admin → **Create group** → name + description → save | Success toast; group appears in list | P0 | UI |
+| D-06 | Edit group | Edit existing test group description | Persists after refresh | P1 | UI |
+| D-07 | Add member to group | Add **alice** persona to a test group via Members tab | Member count updates; alice's effective permissions change | P0 | UI |
+| D-08 | Remove member | Remove member from test group | Reflected in list and in Cost report scope for that user | P0 | UI |
+| D-09 | Assign role to group | Attach Cost role to group via UI | Role count updates on list page; `/api/rbac/v1/access/` reflects change | P0 | UI |
+| D-10 | Delete group (non-system) | Delete a user-created test group | Removed from list; API 404 | P1 | UI |
+| D-11 | Platform default group | View **Default access** | Visible; Members = "All"; destructive actions restricted or warned | P1 | UI |
+| D-12 | Non-admin denied create | Login as **viewer** persona → Groups | Create group hidden or UI shows 403; no silent success. Absorbs former J-04. IAM-reader POST 403 is **API** (I-04) | P0 | UI |
+| D-13 | Filter groups by name | Enter name in **Filter by name** | Table narrows to matching groups | P1 | UI |
+| D-14 | Roles count link | Click role count (e.g. "6") on group row | Navigates to group Roles tab | P1 | UI |
 
 ### E. Users (RBAC-UI-USR)
 
-| ID | Title | Steps | Expected | Pri | Type |
-|----|-------|-------|----------|-----|------|
-| E-01 | List users | Admin → Users | Table with columns: Org. Administrator, Username, Email, First name, Last name, Status; skeleton loaders during fetch | P0 | M |
-| E-02 | Default Active filter | Load Users page | **Status: Active** filter chip applied by default; **Clear filters** link visible | P0 | M |
-| E-03 | User detail | Click any username link from the Users list | URL `/iam/user-access/users/detail/{username}`; detail page with group memberships for that user | P0 | M |
-| E-04 | Invalid user detail | Navigate `/iam/user-access/users/detail/{nonexistent-username}` | Breadcrumb `Users > Invalid user`; heading "User not found"; message "User with username {username} does not exist."; **Back to previous page** button | P0 | M |
-| E-05 | No Invite Users (on-prem) | Scan Users page actions | **No** "Invite user" button; copy directs to external **user management list** link | P0 | M |
-| E-06 | IDP-managed users note | Read Users page intro copy | "These are all of the users in your Red Hat organization… go to your user management list" | P1 | M |
-| E-07 | Filter by username | Use **Username** dropdown + "Filter by username" search | Table narrows to matching users | P1 | M |
-| E-08 | Org Administrator column | Inspect Org. Administrator column | Shows checkmark or **X No** per user | P1 | M |
-| E-09 | Status badges | Inspect Status column | **Active** / **Inactive** badge per user; filter chip matches displayed rows | P1 | M |
-| E-10 | Service account visibility | Clear filters → locate a service account from seed data | Listed; appropriate read-only UI | P2 | M |
-| E-11 | Provision new IDP user end-to-end | Follow **§13 User provisioning (Keycloak → COS IAM)** to create `<username>` with scoped access (e.g. add to an existing persona group such as Payment Team). Complete all three steps including first CoP login | User exists in Keycloak `kubernetes` realm; listed as member on assigned IAM group; appears in IAM **Users** after first CoP login; cost scope matches group role | P0 | M |
+All rows are **UI**. Invalid-user page (E-04) absorbs former **J-12**. No Invite Users (E-05) absorbs former **K-02**. Principals list 200 is **API** (`test_gateway_rbac_principals_iam_reader_returns_200`) — this section is chrome/copy/filters only. Provisioning E-11 absorbs former **K-05**.
+
+| ID | Title | Steps | Expected | Pri | Layer |
+|----|-------|-------|----------|-----|-------|
+| E-01 | List users | Admin → Users | Table with columns: Org. Administrator, Username, Email, First name, Last name, Status; skeleton loaders during fetch | P0 | UI |
+| E-02 | Default Active filter | Load Users page | **Active** filter chip + **Clear filters** visible. **Live gap:** lab users all show **Inactive** and still appear (chip does not filter them out) | P0 | UI |
+| E-03 | User detail | Click a username link from the Users list | URL `/iam/user-access/users/detail/{username}`. **Live gap (2026-08-27):** listed users (e.g. `admin`) deep-link to "User not found" even though `/api/rbac/v1/principals/?usernames=admin` returns 200 — likely SaaS IT-user lookup, not local principals | P0 | UI |
+| E-04 | Invalid user detail | Navigate `/iam/user-access/users/detail/{nonexistent-username}` | Breadcrumb `Users > Invalid user`; heading "User not found"; message "User with username {username} does not exist."; **Back to previous page** button. Absorbs former J-12 | P0 | UI |
+| E-05 | No Invite Users (on-prem) | Scan Users page actions | **No** "Invite user" button; copy directs to external **user management list** link. Absorbs former K-02 | P0 | UI |
+| E-06 | IDP-managed users note | Read Users page intro copy | "These are all of the users in your Red Hat organization… go to your user management list" | P1 | UI |
+| E-07 | Filter by username | Use **Username** dropdown + "Filter by username" search | Table narrows to matching users | P1 | UI |
+| E-08 | Org Administrator column | Inspect Org. Administrator column | Lab shows **No** for every principal including **admin** (org-admin is a Keycloak realm role, not an insights-rbac principal flag). Do not require a checkmark for admin. Org-admin **badge** is G-01; JWT role is **API** (`test_org_admin_identity.py`) | P1 | UI |
+| E-09 | Status badges | Inspect Status column | Lab shows **Inactive** for all listed users. Do not require **Active** badges unless Keycloak→RBAC sync starts sending `is_active` | P1 | UI |
+| E-10 | Service account visibility | Clear filters → locate a service account from seed data | Listed; appropriate read-only UI | P2 | UI |
+| E-11 | Provision new IDP user end-to-end | Follow **§13 User provisioning (Keycloak → COS IAM)** to create `<username>` with scoped access (e.g. add to an existing persona group such as Payment Team). Complete all three steps including first CoP login | User exists in Keycloak `kubernetes` realm; listed as member on assigned IAM group; appears in IAM **Users** after first CoP login; cost scope matches group role. Absorbs former K-05 | P0 | UI |
 
 ### F. Roles (RBAC-UI-ROL)
 
-| ID | Title | Steps | Expected | Pri | Type |
-|----|-------|-------|----------|-----|------|
-| F-01 | List roles | Admin → Roles | Columns: Name, Description, **Groups**, **Permissions**, Last modified; skeleton loaders during fetch | P0 | M |
-| F-02 | Create role button | Admin → Roles | **Create role** primary button visible in toolbar | P0 | M |
-| F-03 | Role detail | Click any role from the list | URL `/iam/user-access/roles/detail/{uuid}`; breadcrumb `Roles > {name}`; description; permissions table | P0 | M |
-| F-04 | Role permissions table | Role detail page | Columns: Application, Resource type, Operation, Last modified; filter by **Applications** | P0 | M |
-| F-05 | Cost Administrator role | Open **Cost Administrator** detail | Application `cost-management`; Resource type `*`; Operation `*` | P0 | M |
-| F-06 | Custom role create | **Create role** → single permission → save | Appears in list; assignable to group | P1 | M |
-| F-07 | Read-only user | **viewer** persona → Roles | List allowed; Create role hidden or 403 | P1 | M |
-| F-08 | Filter roles by name | **Filter by name** search | Table narrows to matching roles | P1 | M |
+All rows are **UI**. Create-role **button** is part of F-01 and C-05 — former F-02 removed.
+
+| ID | Title | Steps | Expected | Pri | Layer |
+|----|-------|-------|----------|-----|-------|
+| F-01 | List roles | Admin → Roles | Columns: **Select**, Name, Description, **Groups**, **Permissions**, Last modified, **Actions**; **Create role** in toolbar; lab has 24 roles including Local Test leftovers | P0 | UI |
+| F-03 | Role detail | Click any role from the list | URL `/iam/user-access/roles/detail/{uuid}`; breadcrumb `Roles > {name}`; description; permissions table | P0 | UI |
+| F-04 | Role permissions table | Role detail page | Columns: Application, Resource type, Operation, Last modified; filter by **Applications** | P0 | UI |
+| F-05 | Cost Administrator role | Open **Cost Administrator** detail | Application `cost-management`; Resource type `*`; Operation `*` | P0 | UI |
+| F-06 | Custom role create | **Create role** → single permission → save | Appears in list; assignable to group | P1 | UI |
+| F-07 | Read-only user | **viewer** persona → Roles | List allowed; Create role hidden or UI 403. Viewer Groups create is D-12; IAM-reader POST is **API** I-04 | P1 | UI |
+| F-08 | Filter roles by name | **Filter by name** search | Table narrows to matching roles | P1 | UI |
 
 ### G. My User Access (RBAC-UI-MUA)
 
-| ID | Title | Steps | Expected | Pri | Type |
-|----|-------|-------|----------|-----|------|
-| G-01 | Org Administrator badge | Login as **admin** persona (org admin) → My User Access | Purple **Org. Administrator** badge next to page title when persona has org-admin flag; absent for non-org-admin personas | P0 | M |
-| G-02 | OpenShift bundle roles | `?bundle=openshift` | Cost Administrator, Cost Cloud Viewer Local Test, Cost OpenShift Viewer Local Test | P0 | M |
-| G-03 | Settings bundle roles | `?bundle=settings` | Sources administrator, User Access administrator, User Access principal viewer | P0 | M |
-| G-04 | Bundle card UI | Inspect bundle selector cards | Exactly **two** cards: **OpenShift** (clusters/advisor/subscriptions/cost management) and **Settings and User Access** (rbac/sources); **no RHEL** | P0 | M |
-| G-05 | Expand permission row | Expand a role row | Sub-table: Application, Resource type, Operation, Resource definitions (e.g. sources / * / *) | P0 | M |
-| G-06 | Role name filter | **Filter by role name** search | Table narrows within active bundle | P1 | M |
-| G-07 | Skeleton loading | Switch bundle while throttling network | Skeleton rows appear during fetch; resolve to data within 5s | P1 | M |
-| G-08 | Alice scoped roles | **alice** persona → My User Access | Only roles tied to payment team / limited scope | P0 | M |
+All rows are **UI**. Expand permission row (G-05) absorbs former **C-11**. MUA skeleton (former G-07) is **J-10**. JWT org-admin is **API** (`test_org_admin_identity.py` / `test_ui_oauth.py`) — G-01 is the **badge**.
+
+| ID | Title | Steps | Expected | Pri | Layer |
+|----|-------|-------|----------|-----|-------|
+| G-01 | Org Administrator badge | Login as **admin** persona (org admin) → My User Access | Purple **Org. Administrator** badge next to page title when persona has org-admin flag; absent for non-org-admin personas | P0 | UI |
+| G-02 | OpenShift bundle roles | `?bundle=openshift` as **admin** | **Cost Administrator** only (from Cost Admin Default). Local Test viewer roles are **not** assigned to admin. URL/heading: C-06 | P0 | UI |
+| G-03 | Settings bundle roles | `?bundle=settings` as **admin** | **User Access principal viewer** (Default access). Sources administrator / User Access administrator are **not** assigned. URL/heading: C-07 | P0 | UI |
+| G-04 | Bundle card UI | Inspect bundle selector cards | Exactly **two** cards: **OpenShift** and **Settings and User Access**; **no RHEL**. Deep-link leftover: C-08 | P0 | UI |
+| G-05 | Expand permission row | Expand a role row | Sub-table: Application, Resource type, Operation, Resource definitions. Absorbs former C-11 | P0 | UI |
+| G-06 | Role name filter | **Filter by role name** search | Table narrows within active bundle | P1 | UI |
+| G-08 | Alice scoped roles | **alice** persona → My User Access | Only roles tied to payment team / limited scope. Cost **report** scope is **API** H-01 | P0 | UI |
 
 ### H. RBAC enforcement through UI (RBAC-UI-ENF)
 
-| ID | Title | Steps | Expected | Pri | Type |
-|----|-------|-------|----------|-----|------|
-| H-01 | Alice cost scope | **alice** persona → OpenShift costs | Only **payment** project data | P0 | Auto (e2e gateway) |
-| H-02 | Bob cost scope | **bob** persona → OpenShift costs | Only **cluster-alpha** | P0 | Auto |
-| H-03 | Carol full scope | **carol** persona → OpenShift costs | All three RBAC test clusters | P0 | Auto |
-| H-04 | Nobody denied cost | **nobody-unassigned** persona → costs via gateway/UI | 403/424 or empty denied state | P0 | Auto |
-| H-05 | IAM reader list principals | **rbac-iam-admin** persona → Groups/Users | Can list; cannot create group (403) | P0 | Auto (PR #173) |
-| H-06 | Permission change propagation | Remove **alice** persona from Payment Team in UI → alice refreshes costs | Payment data disappears within cache TTL (300s documented); verify timestamp | P1 | M |
-| H-07 | Admin sees all IAM | **admin** persona → Users/Groups | Full list counts match API | P1 | M |
-| H-08 | Role assignment takes effect immediately | Create new group → assign Cost role → add user → user login | Cost data scope reflects new role without logout/login | P0 | M |
-| H-09 | End-to-end access revocation | User removed from group in IAM → Cost API call to previously accessible cluster | Returns 403 or empty state for revoked cluster; audit log reflects RBAC event | P0 | Auto |
-| H-10 | New group workflow E2E | Admin creates group → assigns Cost role → adds member (member must exist in Keycloak per **§13**) → member logs in | Cost reports show correct data scope on first login | P0 | M |
-| H-11 | Keycloak sync to RBAC | Delete user in Keycloak → IAM Users list | User marked deleted/inactive within documented sync interval (specify TTL) | P1 | M |
-| H-12 | Nested group permissions (if supported) | User in nested groups → Cost reports | Verify permission inheritance chain | P1 | M |
+Persona **cost-report** isolation is **API**. Do not re-implement H-01–H-05 or H-09 as Playwright.
+
+| Existing ID | Layer | Automated test |
+|-------------|-------|----------------|
+| H-01 Alice cost scope | API | `test_alice_*` in `test_rbac_access.py` |
+| H-02 Bob cost scope | API | `test_bob_*` |
+| H-03 Carol full scope | API | `test_carol_*` |
+| H-04 Nobody denied cost | API | `test_no_rbac_user_denied`, `test_gateway_openshift_costs_user_without_rbac_returns_403` |
+| H-05 IAM reader list/write | API | `test_gateway_rbac_principals_iam_reader_returns_200`, `test_gateway_rbac_groups_post_iam_reader_forbidden` (I-03 / I-04). UI chrome for viewer create is D-12 |
+| H-09 API revocation | API | `test_permission_revocation_honored_after_cache_clear` (I-07). UI-driven revoke is H-06 |
+| H-12 Nested groups | — | **N/A** — not in the live IAM UI |
+
+Remaining **UI** cases:
+
+| ID | Title | Steps | Expected | Pri | Layer |
+|----|-------|-------|----------|-----|-------|
+| H-06 | Permission change propagation | Remove **alice** persona from Payment Team in **IAM UI** → alice refreshes costs | Payment data disappears within cache TTL (300s documented); verify timestamp. API-only revoke is H-09 — this row is the UI workflow | P1 | UI |
+| H-07 | Admin sees all IAM | **admin** persona → Users/Groups | Full list **renders** in UI; counts may be checked against API but the case is the page, not a new gateway test | P1 | UI |
+| H-08 | Role assignment takes effect immediately | Create new group → assign Cost role → add user → user already logged in refreshes | Cost data scope reflects new role without logout/login | P0 | UI |
+| H-10 | New group workflow E2E | Admin creates group → assigns Cost role → adds member (member must exist in Keycloak per **§13**) → member logs in | Cost reports show correct data scope on first login. First-login Users list is E-11 | P0 | UI |
+| H-11 | Keycloak sync to RBAC | Delete user in Keycloak → IAM Users list | User marked deleted/inactive within documented sync interval (specify TTL) | P1 | UI |
 
 ### I. API / gateway alignment (RBAC-UI-API)
 
-Map to existing `test_rbac_gateway.py` / PR #173 (label **automated** in FLPATH-3551):
+**All of Section I is API.** Map to existing `test_rbac_gateway.py` / PR #173. Do **not** file UI tickets for these.
 
-| ID | UI correlate | Automated test |
-|----|--------------|----------------|
-| I-01 | Unauthenticated IAM API | `test_gateway_rbac_*_unauthenticated_returns_401` |
-| I-02 | Unassigned user | `test_gateway_*_user_without_rbac_returns_403` |
-| I-03 | IAM reader principals | `test_gateway_rbac_principals_iam_reader_returns_200` |
-| I-04 | IAM reader write denied | `test_gateway_rbac_groups_post_iam_reader_forbidden` |
-| I-05 | JWT expiry | `test_expired_jwt_rejected` |
-| I-06 | Malicious org_id | `test_org_id_tenant_isolation_boundary_cases` |
-| I-07 | Revocation | `test_permission_revocation_honored_after_cache_clear` |
-| I-08 | Concurrent sessions | `test_concurrent_jwt_sessions_no_resource_exhaustion` |
+| ID | Layer | Automated test |
+|----|-------|----------------|
+| I-01 | API | `test_gateway_rbac_*_unauthenticated_returns_401` (includes `/rbac/v1/status/` — former B-06 unauth) |
+| I-02 | API | `test_gateway_*_user_without_rbac_returns_403` |
+| I-03 | API | `test_gateway_rbac_principals_iam_reader_returns_200` |
+| I-04 | API | `test_gateway_rbac_groups_post_iam_reader_forbidden` |
+| I-05 | API | `test_expired_jwt_rejected` |
+| I-06 | API | `test_org_id_tenant_isolation_boundary_cases` (also covers N-05 / N-07 class of injection against org_id) |
+| I-07 | API | `test_permission_revocation_honored_after_cache_clear` |
+| I-08 | API | `test_concurrent_jwt_sessions_no_resource_exhaustion` |
+| I-09 | API | `test_jwt_without_required_claims_rejected` |
+| I-10 | API | `test_rbac_service_unavailable_denies_access_fail_closed` (cost reports — **not** UI Groups error chrome; UI remainder is J-01) |
+| I-11 | API | `test_rbac_iam_reader_cannot_modify_own_permissions` |
+| I-12 | API | `test_rbac_cache_ttl_configuration_exists` |
+| I-13 | Infra | `test_rbac_migration_job_completed` |
 
 See also: `tests/suites/auth/RBAC_SECURITY_TESTS.md`
 
 ### J. Negative, error handling & resilience (RBAC-UI-NEG)
 
-| ID | Title | Steps | Expected | Pri | Type |
-|----|-------|-------|----------|-----|------|
-| J-01 | RBAC API down | Scale rbac-api to 0 → open Groups | Error state in UI (not infinite spinner); fail closed | P0 | Auto (fail-closed test) |
-| J-02 | Missing `/rbac/` nginx block | Remove location /rbac/ → reload IAM | Clear error in console; graceful degradation message | P1 | M |
-| J-03 | Stale session | Expire Keycloak session → click IAM | Redirect login, no partial stale tables | P1 | M |
-| J-04 | 403 on write | **viewer** persona attempts create group | Inline error or disabled control; no silent success | P1 | M |
-| J-05 | Large list pagination | Groups/Users with full seed set (1000+ users) | Pagination works; page load <5s; memory <500MB; no browser hang | P2 | M |
-| J-06 | Network interruption during create | Create group → kill network mid-request → restore | Retry logic or clear error message; no duplicate groups | P1 | M |
-| J-07 | Keycloak restart mid-session | Active IAM session → restart Keycloak pod → continue workflow | Graceful re-auth; no data loss in form fields | P2 | M |
-| J-08 | Gateway timeout on slow query | Trigger slow RBAC query (e.g., 1000+ users) → gateway 504 | User-friendly timeout message; no infinite spinner | P1 | M |
-| J-09 | Partial API failure | RBAC API returns 500 on `/users/` but 200 on `/groups/` | Graceful degradation; error shown for Users tab only | P2 | M |
-| J-10 | Skeleton loading states | Navigate Users / Roles / Groups / switch MUA bundle | PatternFly skeleton rows shown during fetch; no permanent blank pane | P0 | M |
-| J-11 | Blank MFE on fast nav | Navigate to `/iam/my-user-access` without wait | Content may be blank briefly; resolves within 5s (document as timing risk) | P1 | M |
-| J-12 | Invalid user deep link | Direct URL to `/iam/user-access/users/detail/{bad}` | Error page with **Back to previous page**; no uncaught exception | P0 | M |
+All remaining rows are **UI** error chrome. Former J-04 → D-12. Former J-12 → E-04. API fail-closed / JWT expiry stay in Section I.
+
+| ID | Title | Steps | Expected | Pri | Layer |
+|----|-------|-------|----------|-----|-------|
+| J-01 | RBAC API down | Scale rbac-api to 0 → open Groups | Error state **in the Groups page** (not infinite spinner). API cost-report fail-closed is I-10 — do not re-assert HTTP status here | P0 | UI |
+| J-02 | Missing `/rbac/` nginx block | Remove location /rbac/ → reload IAM | Clear error in console; graceful degradation message | P1 | UI |
+| J-03 | Stale session | Expire Keycloak session → click IAM | Redirect login, no partial stale tables. Absorbs former A-05. API JWT expiry is I-05 | P1 | UI |
+| J-05 | Large list pagination | Groups/Users with full seed set (1000+ users) | Pagination works; page load <5s; memory <500MB; no browser hang | P2 | UI |
+| J-06 | Network interruption during create | Create group → kill network mid-request → restore | Retry logic or clear error message; no duplicate groups | P1 | UI |
+| J-07 | Keycloak restart mid-session | Active IAM session → restart Keycloak pod → continue workflow | Graceful re-auth; no data loss in form fields | P2 | UI |
+| J-08 | Gateway timeout on slow query | Trigger slow RBAC query (e.g., 1000+ users) → gateway 504 | User-friendly timeout message; no infinite spinner | P1 | UI |
+| J-09 | Partial API failure | RBAC API returns 500 on `/users/` but 200 on `/groups/` | Graceful degradation; error shown for Users tab only | P2 | UI |
+| J-10 | Skeleton loading states | Navigate Users / Roles / Groups / switch MUA bundle | PatternFly skeleton rows shown during fetch; no permanent blank pane. Absorbs former G-07 | P0 | UI |
+| J-11 | Blank MFE on fast nav | Navigate to `/iam/my-user-access` without wait | Content may be blank briefly; resolves within 5s (document as timing risk) | P1 | UI |
 
 ### K. UX / on-prem SaaS parity gaps (RBAC-UI-UX)
 
-Per [COST-7589](https://redhat.atlassian.net/browse/COST-7589) / [COST-7632](https://redhat.atlassian.net/browse/COST-7632):
+Per [COST-7589](https://redhat.atlassian.net/browse/COST-7589) / [COST-7632](https://redhat.atlassian.net/browse/COST-7632). Remaining rows are **UI** checks that are not already a dedicated C/E/G case. Former K-02 → E-05. Former K-03 → C-08. Former K-05 → E-11.
 
-| ID | Check | Expected |
-|----|-------|----------|
-| K-01 | No console.redhat.com links | No external SaaS dependencies in network tab (except documented user management list link) |
-| K-02 | No Invite Users | Absent |
-| K-03 | On-prem bundle scope | OpenShift + Settings/User Access bundles only (no extraneous HCC apps in MUA) |
-| K-04 | Group-centric assignment | Primary workflow is group ↔ role ↔ members (Groups list shows role counts + member scope) |
-| K-05 | LDAP/AD user sync | Users provisioned in Keycloak/IDP per **§13** appear in IAM after first CoP login; **user management list** link for IDP admin |
-| K-06 | Local test role naming | Roles suffixed "Local Test" acceptable in dev; verify cost-relevant roles present in prod builds |
+| ID | Check | Expected | Layer |
+|----|-------|----------|-------|
+| K-01 | No console.redhat.com links | No external SaaS dependencies in network tab (except documented user management list link) | UI |
+| K-04 | Group-centric assignment | Primary workflow is group ↔ role ↔ members (covered in detail by D-*); this row is the on-prem UX assertion only | UI |
+| K-06 | Local test role naming | Roles suffixed "Local Test" acceptable in dev; verify cost-relevant roles present in prod builds (list chrome is F-01) | UI |
 
-### L. Performance & load testing — covered by COST-7643
+### L. Performance & load testing — **API**, covered by COST-7643
 
 RBAC authorization performance is already implemented and validated in `tests/suites/performance/test_rbac_perf.py` ([COST-7643](https://redhat.atlassian.net/browse/COST-7643)). Do **not** duplicate these cases in the UI suite.
 
@@ -382,33 +458,25 @@ RBAC authorization performance is already implemented and validated in `tests/su
 
 UI-only smoke timing remains in **B-07** (MFE visible ≤5s) and **B-08** (browser memory/CPU). Large-list pagination resilience remains in **J-05**. Results: `docs/performance/FINDINGS.md` (FINDING-037) and `docs/performance/performance-testing-plan.md`.
 
-### M. Accessibility (RBAC-UI-A11Y)
-
-WCAG 2.1 AA compliance testing:
-
-| ID | Title | Steps | Expected | Pri | Type |
-|----|-------|-------|----------|-----|------|
-| M-01 | Keyboard navigation - Groups | Tab through Groups page; Enter to open detail; Tab to actions | All interactive elements reachable; focus visible; logical tab order | P0 | M |
-| M-02 | Keyboard navigation - Forms | Create group form → Tab through fields → Enter to submit | Form submittable without mouse; error focus management | P0 | M |
-| M-03 | Screen reader - JAWS/NVDA | Navigate Groups/Users with screen reader | Headings announced; table structure conveyed; action buttons labeled | P0 | M |
-| M-04 | Color contrast | Inspect role badges, status indicators, error messages | 4.5:1 ratio for normal text; 3:1 for large text/graphics | P0 | M |
-| M-05 | Focus indicators | Tab through all IAM pages | Visible focus ring (not default browser; 2px+ outline) | P0 | M |
-| M-06 | Alt text for icons | Inspect icon-only buttons (edit, delete, etc.) | Aria-labels or screen reader text present | P1 | M |
-| M-07 | Skip navigation | Load IAM page with keyboard | "Skip to main content" link functional | P2 | M |
-| M-08 | Form error announcements | Submit invalid form | Errors announced to screen reader; focus moves to first error | P1 | M |
-
 ### N. Security testing - UI layer (RBAC-UI-SEC)
 
-| ID | Title | Steps | Expected | Pri | Type |
-|----|-------|-------|----------|-----|------|
-| N-01 | XSS in group name | Create group with name `<script>alert('xss')</script>` | Name displayed as plain text; script not executed | P0 | M |
-| N-02 | XSS in group description | Create group with description containing HTML/JS | Sanitized display; no script execution | P0 | M |
-| N-03 | CSRF token validation | Attempt POST `/api/rbac/v1/groups/` from external page | Request blocked; CSRF token required | P0 | Auto |
-| N-04 | Clickjacking protection | Attempt to embed IAM in iframe from external domain | CSP or X-Frame-Options blocks embedding | P0 | Auto |
-| N-05 | URL parameter injection | Navigate `/iam/user-access/groups?org_id=malicious` | Org_id from JWT only; URL param ignored/sanitized | P0 | Auto |
-| N-06 | SQL injection in search | Search users with `'; DROP TABLE users; --` | Parameterized queries; no SQL execution | P1 | M |
-| N-07 | Path traversal in API | Attempt `GET /api/rbac/v1/../../etc/passwd` | 404 or 400; no directory traversal | P1 | Auto |
-| N-08 | Session fixation | Attempt to set session cookie before login | Session regenerated post-login; old cookie invalid | P2 | M |
+CSRF, clickjacking, org_id injection, and path traversal are **API / Infra** — do not re-test them as Playwright.
+
+| Existing ID | Layer | Coverage |
+|-------------|-------|----------|
+| N-03 CSRF POST | API | Cross-origin `POST /api/rbac/v1/groups/` must fail. On-prem uses JWT/oauth2-proxy (see `test_gateway_auth.py` 401 without token, I-04 write deny). Not a CSRF-cookie test |
+| N-04 Clickjacking | Infra | `X-Frame-Options SAMEORIGIN` on `/rbac/` in `cost-onprem/templates/ui/nginx-config.yaml` (same ConfigMap as B-03) |
+| N-05 URL `org_id` | API | Tenant comes from JWT; I-06 `test_org_id_tenant_isolation_boundary_cases` |
+| N-07 Path traversal | API | I-06 includes `../../../etc/passwd` org_id case; gateway 401/404 on `GET /api/rbac/v1/../../etc/passwd` |
+
+Remaining **UI** cases:
+
+| ID | Title | Steps | Expected | Pri | Layer |
+|----|-------|-------|----------|-----|-------|
+| N-01 | XSS in group name | Create group with name `<script>alert('xss')</script>` | Name displayed as plain text; script not executed | P0 | UI |
+| N-02 | XSS in group description | Create group with description containing HTML/JS | Sanitized display; no script execution | P0 | UI |
+| N-06 | SQL injection in **UI search** | Search users with `'; DROP TABLE users; --` | Table empty or no-match; no uncaught exception. org_id SQLi is I-06 **API** | P1 | UI |
+| N-08 | Session fixation | Attempt to set session cookie before login | Session regenerated post-login; old cookie invalid. Cookie **clear on logout** is `test_oauth_cookie_cleared_after_logout` | P2 | UI |
 
 ---
 
@@ -416,12 +484,12 @@ WCAG 2.1 AA compliance testing:
 
 | Phase | Focus | Entry criteria | Exit criteria |
 |-------|-------|----------------|---------------|
-| **Phase 0 — Smoke** | A-01–A-02, B-01–B-07, C-01–C-01b, C-02–C-02e, C-03–C-07, C-14 | Cluster + UI + Keycloak up | All P0 infra/nav/auth pass |
+| **Phase 0 — Smoke** | A-02, B-01–B-05, B-07, C-01–C-01b, C-02–C-02e, C-03–C-07, C-14 (run `test_login_flow.py` / `test_logout_flow.py` first) | Cluster + UI + Keycloak up | All P0 infra/nav/auth pass |
 | **Phase 1 — Functional IAM** | D, E, F, G (admin workflows) | Phase 0 pass | CRUD cycles complete without API errors |
-| **Phase 2 — Persona enforcement** | H (all personas), I (gateway alignment) | RBAC seed + Keycloak users | All personas match e2e expectations; gateway tests green |
+| **Phase 2 — Persona enforcement** | H-06–H-08, H-10–H-11 (**UI**). Run **API** `test_rbac_access.py` + `test_rbac_gateway.py` for H-01–H-05 / I | RBAC seed + Keycloak users | UI workflows pass; API persona tests green |
 | **Phase 3 — Regression & Automation** | Full automated suite + Playwright | PR #173, #175 merged; automation setup complete | Chart pytest green; Playwright suite passing |
-| **Phase 4 — Quality & Hardening** | J (negative), M (a11y), N (security) | Phase 3 pass | Accessibility spot-check pass; no S1/S2 defects. RBAC perf already covered by COST-7643 |
-| **Phase 5 — Release Readiness** | K (UX gaps), sign-off checklist | Phase 4 pass; all P0/P1 tests executed | Sign-off checklist complete; known limitations documented; automation roadmap approved |
+| **Phase 4 — Quality & Hardening** | J, N-01/N-02/N-06/N-08 (**UI**) | Phase 3 pass | No S1/S2 defects. API security is I / `test_gateway_auth.py` |
+| **Phase 5 — Release Readiness** | K-01, K-04, K-06; sign-off checklist | Phase 4 pass; all P0/P1 tests executed | Sign-off checklist complete; known limitations documented; automation roadmap approved |
 
 ---
 
@@ -467,20 +535,19 @@ export PYTHON=/usr/bin/python3.12
 - [ ] `build:onprem` / chart deploy includes RBAC assets (no regression)
 - [ ] No second UI hostname required
 - [ ] No re-auth when switching Cost ↔ IAM
-- [ ] Persona isolation verified (alice/bob/carol/nobody)
-- [ ] On-prem UX constraints verified (K-01–K-05)
+- [ ] Persona isolation verified — **API**: `test_rbac_access.py` (H-01–H-04); **UI**: H-10, E-11
+- [ ] On-prem UX constraints verified (K-01, K-04, K-06; Invite Users = E-05; bundles = C-08 / G-04)
 
 ### Security & Infrastructure
-- [ ] Gateway security tests green (PR #173)
-- [ ] Nginx `/rbac/` location deployed (PR #175)
-- [ ] XSS/CSRF/clickjacking tests passed (N-01–N-08)
+- [ ] Gateway security tests green (PR #173) — **API**
+- [ ] Nginx `/rbac/` location deployed (PR #175) — **Infra** B-03
+- [ ] XSS rendered as text (N-01–N-02); search injection (N-06). CSRF/clickjack/org_id/path are **API/Infra** mappings
 - [ ] No S1/S2 defects open
 
 ### Performance & Quality
 - [ ] MFE load time <5s (p95); recorded in run notes (B-07)
 - [ ] All P0 test cases passed
 - [ ] RBAC authorization performance covered by COST-7643 (`test_rbac_perf.py`); not re-run as part of this UI plan
-- [ ] Accessibility spot-check passed (keyboard nav, screen reader on Groups/Users)
 
 ### Documentation & Automation
 - [ ] Test data cleanup script validated
@@ -498,13 +565,12 @@ Under [FLPATH-3551](https://redhat.atlassian.net/browse/FLPATH-3551) / [COST-757
 - `rbac-ui-infra` (B-*) — MFE delivery & infrastructure
 - `rbac-ui-nav` (C-*) — Navigation & routing
 - `rbac-ui-iam-crud` (D–G) — IAM functional CRUD (Groups, Users, Roles, My User Access)
-- `rbac-ui-enforcement` (H-*) — RBAC enforcement end-to-end
-- `rbac-ui-negative` (J-*) — Error handling & resilience
-- `rbac-ui-ux-onprem` (K-*) — On-prem UX constraints
-- `rbac-ui-accessibility` (M-*) — WCAG 2.1 AA compliance
-- `rbac-ui-security` (N-*) — UI-layer security testing
+- `rbac-ui-enforcement` (H-06–H-08, H-10–H-11) — UI workflows only; do not file H-01–H-05 / H-09 as UI
+- `rbac-ui-negative` (J-*) — UI error chrome
+- `rbac-ui-ux-onprem` (K-01, K-04, K-06)
+- `rbac-ui-security` (N-01, N-02, N-06, N-08) — UI XSS/search/session; not CSRF/clickjack/API traversal
 
-Gateway API cases (I-*) are largely covered by FLPATH-4308–4329 already; reference from UI test cases where overlap exists (e.g., H-05 → I-03). RBAC performance (former L-*) is covered by COST-7643; do not file duplicate UI perf tickets.
+Gateway **API** cases (I-*) are covered by FLPATH-4308–4329 / `test_rbac_gateway.py`. RBAC performance is COST-7643. Do not file duplicate UI tickets for API mappings.
 
 ---
 
@@ -523,34 +589,27 @@ UI smoke checks that stay in this plan: **B-07** (MFE load ≤5s), **B-08** (bro
 ## 13. Test data management
 
 ### Seed Data Location
-- **Primary**: `tests/fixtures/rbac-seed.yaml` (versioned)
-- **Chart bootstrap**: `cost-onprem/charts/insights-rbac/templates/seed-job.yaml`
-- **E2E fixtures**: `tests/suites/e2e/fixtures/rbac_personas.py`
+- **Chart session bootstrap**: `tests/rbac_bootstrap_scripts.py` (`CI Test Admin` + Cost Administrator for SAs and `admin`)
+- **Gateway IAM reader**: `render_rbac_iam_reader_bootstrap_script()` in the same module (`Gateway RBAC IAM Readers`)
+- **Persona groups/roles**: `tests/suites/e2e/test_rbac_access.py` (`Cost Admin Default`, `RBAC Payment Team`, `RBAC Cluster Alpha Ops`, `RBAC Cost Admins`)
+- **Keycloak users**: `tests/rbac_keycloak_users.py` (`admin`, `viewer`, `alice`/`bob`/`carol`, `nobody-unassigned`, `rbac-iam-admin`)
+
+There is **no** `tests/fixtures/rbac-seed.yaml`, `scripts/reset-rbac-test-data.sh`, or `tests/suites/e2e/fixtures/rbac_personas.py` in this repo.
 
 ### Cleanup Policy
-- **Prefix convention**: All test-created groups/roles must use `TEST-*` prefix
-- **Cleanup script**: `./scripts/reset-rbac-test-data.sh`
-  - Deletes `TEST-*` groups/roles
-  - Preserves seeded baseline data (CI Test Admin, Payment Team, etc.)
-  - Safe for CI and manual runs
+- **Prefix convention**: Prefer `TEST-*` for groups/roles created by **manual UI** runs
+- **Automated cleanup**: e2e/gateway fixtures tear down what they create; chart bootstrap `CLEANUP_SCRIPT` in `rbac_bootstrap_scripts.py` is for platform-default role detach, not a general UI reset
 
 ### Reset Procedure
 ```bash
-# After test run or before fresh test cycle:
-./scripts/reset-rbac-test-data.sh --namespace cost-onprem
-
-# Verify clean state:
+# Inspect groups created during a UI session:
 kubectl exec -n cost-onprem deploy/insights-rbac -- \
-  python manage.py shell -c "from management.models import Group; print(Group.objects.filter(name__startswith='TEST-').count())"
+  python manage.py shell -c "from management.models import Group; print([g.name for g in Group.objects.filter(name__startswith='TEST-')])"
 ```
-
-### Seed Data Versioning
-- **Version tag**: Include in `rbac-seed.yaml` header (e.g., `# Version: 2026-Q2-v1`)
-- **Change log**: Document in `docs/testing/rbac-seed-changelog.md` when adding/modifying personas
 
 ### User provisioning (Keycloak → COS IAM)
 
-Reference procedure for manual test setup and test cases **E-11**, **H-08**, **H-10**, **K-05**.
+Reference procedure for manual test setup and test cases **E-11**, **H-08**, **H-10**.
 
 Keycloak and COS IAM are **separate systems**:
 
@@ -623,7 +682,6 @@ See also: `docs/operations/rbac-setup.md` (User and Group Management).
 | Browser compatibility issues (Firefox/Edge) | Low | Medium | Test on Chrome 120+, Firefox 115+, Edge 120+ per browser matrix |
 | Concurrent admin edits cause race conditions | Medium | High | Test D-14 explicitly; document conflict resolution strategy |
 | Large dataset pagination breaks on 1000+ items | Low | High | Manual/UI check J-05; monitor prod for dataset growth |
-| Playwright missing system deps on lab | High | Low | Containerized test runner or manual fallback; document in prerequisites |
 | Test data pollution between runs | Medium | Medium | Mandatory cleanup script in CI; `TEST-*` prefix enforcement |
 
 **Mitigation tracking**: Link high-impact risks to Jira blockers; review mitigation effectiveness in retrospectives.
@@ -637,13 +695,13 @@ Maps COST-7654 POC acceptance criteria to test case coverage:
 | AC # | Acceptance Criteria | Test Cases | Status |
 |------|---------------------|------------|--------|
 | AC-1 | RBAC remote builds with plugin-manifest under `/rbac/` | B-01, B-03 | ✓ |
-| AC-2 | koku-ui-onprem loads MFE via Scalprum | B-02, C-01–C-08, G-01–G-07 | ✓ |
+| AC-2 | koku-ui-onprem loads MFE via Scalprum | B-02, C-01–C-08, G-01–G-06, G-08 | ✓ |
 | AC-3 | IAM reachable from shell navigation | C-01, C-01a–C-01b, C-02–C-02e, C-03–C-05a, C-09, C-14 | ✓ |
 | AC-4 | Authenticated user completes IAM flows against `/api/rbac/` | B-05, D-05, E-03, F-03, F-06 | ✓ |
 | AC-5 | No second UI hostname required | B-04 | ✓ |
 | AC-6 | No re-auth when switching Cost ↔ IAM | A-02 | ✓ |
-| AC-7 | Persona isolation verified | H-01–H-04, H-09–H-10, E-11 | ✓ |
-| AC-8 | On-prem UX constraints (no Invite Users) | K-01–K-05 | ✓ |
+| AC-7 | Persona isolation verified | **API** H-01–H-04, H-09; **UI** H-10, E-11 | ✓ |
+| AC-8 | On-prem UX constraints (no Invite Users) | E-05, C-08, G-04, K-01, K-04 | ✓ |
 
 **Coverage gap analysis**: All ACs mapped to ≥1 P0/P1 test case. No gaps identified.
 
@@ -653,13 +711,15 @@ Maps COST-7654 POC acceptance criteria to test case coverage:
 
 | Issue | Impact | Workaround | Tracking |
 |-------|--------|-----------|----------|
-| Playwright deps missing on lab hosts | Cannot run headless UI tests | Use containerized Playwright or manual tests | FLPATH-XXXX |
 | 3–5s MFE lazy-load delay | False negatives if wait <5s | Hard-code 5s wait in all IAM nav tests (C-*, D-*) | By design |
 | RBAC cache TTL 300s | Permission changes delayed | Document in H-06; add cache-clear step for immediate validation | COST-7XXX |
-| Keycloak Admin Users pagination (10/page) | New users not visible on first page | Use search or navigate to page 2; see §13 | By design |
 | IAM Users list lags Keycloak | User in Keycloak but not in IAM **Users** | First CoP login required; see §13 Step 3 | By design |
-| No API for bulk user creation | Cannot easily seed 1000+ users | Use Django shell script in `tests/utils/seed_rbac_users.py` | Future enhancement |
+| No API for bulk user creation | Cannot easily seed 1000+ users | Django shell in RBAC pod (no `seed_rbac_users.py` in-repo) | Future enhancement |
 | Gateway JWT expiry not synchronized with UI session | UI shows logged in but API returns 401 | Refresh token interceptor in UI; test in J-03 | COST-7XXX |
+| Bare `/iam/my-user-access` hydrates `?bundle=rhel` | User-menu default is OpenShift; only the **no-query deep link** (and explicit `?bundle=rhel`) shows "Your Red Hat Enterprise Linux roles" | Assert C-02 on user-menu path; C-08 for deep-link leftover vs COST-7589 | Live 2026-08-27 |
+| User detail 404 for listed usernames | E-03 fails: list links to `/users/detail/{username}` but page is "User not found" | Confirm `/api/rbac/v1/principals/?usernames=` still 200; treat as UI defect | Live 2026-08-27 |
+| Users Status/Org Admin columns unused | All lab principals **Inactive** and Org. Administrator **No** (including admin) | Do not assert SaaS-style Active/checkmark; G-01 badge is the org-admin signal | Live 2026-08-27 |
+| Dummy principal profile fields | first/last/email are `foo`/`bar`/`baz` | Do not assert real names/emails | Keycloak→RBAC sync |
 
 **Future improvements**: Track in backlog; revisit quarterly.
 
@@ -685,34 +745,25 @@ Maps COST-7654 POC acceptance criteria to test case coverage:
 |----------|-----|----------------|---------------|-------|
 | **P0** | No Playwright in chart CI for IAM | Implement Playwright suite in `tests/suites/ui/test_rbac_iam.py` | 2026-Q3 Sprint 1 | QE Team |
 | **P0** | UI tests need MFE load wait fixture | Add `wait_for_iam_content()` fixture with network idle detection; parameterize persona credentials (no hardcoded usernames) | 2026-Q3 Sprint 1 | QE Team |
-| **P1** | Groups CRUD automation | API-level tests exist; add UI smoke for D-03, D-08 | 2026-Q3 Sprint 2 | QE Team |
+| **P1** | Groups CRUD automation | API write-deny exists (I-04); add UI smoke for D-03, D-08 | 2026-Q3 Sprint 2 | QE Team |
 | **P1** | Map Jira TCs to FLPATH-3551 | Extend FLPATH-3551 with UI-specific cases (beyond FLPATH-4308–4329) | 2026-Q3 Sprint 2 | QE Lead |
 | **P2** | Visual regression (optional) | Storybook parity checks (referenced in COST-7654) | 2026-Q4 | Future |
-| **P2** | Accessibility automation | Integrate axe-core into Playwright suite for M-01–M-08 | 2026-Q4 | Future |
 
-### Tooling Decision Matrix
-
-| Tool | Pros | Cons | Decision |
-|------|------|------|----------|
-| **Playwright** | Faster; better debugging; modern API; multi-browser support | New toolchain for team | **Selected** for all phases |
-| **Cypress** | PatternFly community examples | Slower; limited multi-browser | Not selected |
-| **pytest + Selenium** | Existing chart CI integration | Flaky on lab hosts; outdated | Manual fallback only |
-
-### CI Integration Plan
-1. **Sprint 1**: Add Playwright to chart CI as optional job (manual trigger)
-2. **Sprint 2**: Automate on PR for `/cost-onprem/charts/insights-rbac/**` changes
-3. **Sprint 3**: Add to nightly regression suite
 
 ---
 
 ## Related documentation
 
-| Document | Path | Relevance |
-|----------|------|-----------|
-| RBAC gateway automated tests | `tests/suites/auth/RBAC_SECURITY_TESTS.md` | Backend test coverage (Section I mapping) |
-| RBAC setup operations | `docs/operations/rbac-setup.md` | Environment setup for testing |
-| Gateway test module | `tests/suites/auth/test_rbac_gateway.py` | Automated backend prerequisites |
-| E2E persona tests | `tests/suites/e2e/test_rbac_access.py` | Persona validation (H-* tests) |
-| RBAC authorization performance | `tests/suites/performance/test_rbac_perf.py` | COST-7643 PERF-RBAC-001–006 (Section L / §12 mapping) |
-| Performance testing plan | `docs/performance/performance-testing-plan.md` | Existing perf suite, including RBAC |
-| Performance findings | `docs/performance/FINDINGS.md` | FINDING-037 RBAC authorization results |
+| Document | Path | Layer | Relevance |
+|----------|------|-------|-----------|
+| RBAC gateway automated tests | `tests/suites/auth/RBAC_SECURITY_TESTS.md` | API | Section I mapping |
+| RBAC setup operations | `docs/operations/rbac-setup.md` | — | Environment setup |
+| Gateway test module | `tests/suites/auth/test_rbac_gateway.py` | API | I-*, H-04/H-05/H-09 |
+| Gateway JWT (ingress/koku) | `tests/suites/auth/test_gateway_auth.py` | API | 401/200 token tests; not IAM chrome |
+| E2E persona tests | `tests/suites/e2e/test_rbac_access.py` | API | H-01–H-04 |
+| UI login/logout | `tests/suites/ui/test_login_flow.py`, `test_logout_flow.py` | UI | A-01 and Cost-half of A-03 |
+| Cost navigation | `tests/suites/ui/test_navigation.py` | UI | Cost pages only; C-14 selector |
+| Nginx `/rbac/` | `cost-onprem/templates/ui/nginx-config.yaml` | Infra | B-03; N-04 X-Frame-Options |
+| RBAC authorization performance | `tests/suites/performance/test_rbac_perf.py` | API | COST-7643 PERF-RBAC-001–006 |
+| Performance testing plan | `docs/performance/performance-testing-plan.md` | API | Existing perf suite |
+| Performance findings | `docs/performance/FINDINGS.md` | API | FINDING-037 |

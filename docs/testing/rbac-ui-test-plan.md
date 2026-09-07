@@ -1,6 +1,6 @@
 # RBAC UI Test Plan — Cost Management On-Prem
 
-**Date**: 2026-05-21 (Updated: 2026-09-01)  
+**Date**: 2026-05-21 (Updated: 2026-09-07)  
 **Status**: Review  
 **Epic**: [COST-7570](https://redhat.atlassian.net/browse/COST-7570) — CoP Authentication & Authorization Migration  
 **Story**: [COST-7632](https://redhat.atlassian.net/browse/COST-7632) — RBAC UI  
@@ -318,7 +318,7 @@ All rows are **UI**. Viewer-cannot-create (D-12) absorbs former **J-04**. Do not
 | D-11 | Platform default group | View **Default access** | Visible; Members = "All"; destructive actions restricted or warned | P1 | UI |
 | D-12 | Non-admin denied create | Login as **viewer** persona → Groups | Create group hidden or UI shows 403; no silent success. Absorbs former J-04. IAM-reader POST 403 is **API** (I-04) | P0 | UI |
 | D-13 | Filter groups by name | Enter name in **Filter by name** | Table narrows to matching groups | P1 | UI |
-| D-14 | Roles count link | Click role count (e.g. "6") on group row | Navigates to group Roles tab | P1 | UI |
+| D-14 | Roles count display (not a link) | On Groups list, inspect **Roles** column for **Default access** (shows **6**) and a custom group (e.g. RBAC Payment Team) | Count displays the correct number; count is **not** a navigation link (PatternFly may expose it as a button in the a11y tree, but clicking does not change URL). Navigation to group Roles tab is **D-02** (click group **name**). Members column may expand inline for non-default groups only | P1 | UI |
 
 ### E. Users (RBAC-UI-USR)
 
@@ -340,7 +340,7 @@ All rows are **UI**. Invalid-user page (E-04) absorbs former **J-12**. No Invite
 
 ### F. Roles (RBAC-UI-ROL)
 
-All rows are **UI**. Create-role **button** is part of F-01 and C-05 — former F-02 removed.
+All rows are **UI**. Create-role **button** is part of F-01 and C-05 — former F-02 removed. **F-06** requires **§13 Custom role creation** setup (`rbac.roleCreateAllowList`); skip F-06 on default chart installs where the Add permissions picker is intentionally empty.
 
 | ID | Title | Steps | Expected | Pri | Layer |
 |----|-------|-------|----------|-----|-------|
@@ -348,7 +348,7 @@ All rows are **UI**. Create-role **button** is part of F-01 and C-05 — former 
 | F-03 | Role detail | Click any role from the list | URL `/iam/user-access/roles/detail/{uuid}`; breadcrumb `Roles > {name}`; description; permissions table | P0 | UI |
 | F-04 | Role permissions table | Role detail page | Columns: Application, Resource type, Operation, Last modified; filter by **Applications** | P0 | UI |
 | F-05 | Cost Administrator role | Open **Cost Administrator** detail | Application `cost-management`; Resource type `*`; Operation `*` | P0 | UI |
-| F-06 | Custom role create | **Create role** → single permission → save | Appears in list; assignable to group | P1 | UI |
+| F-06 | Custom role create | **Prereq:** complete **§13 Custom role creation** (`roleCreateAllowList` set). As **admin** → **Create role** → from scratch or copy → **Add permissions** → select ≥1 permission → save | Role appears in list; assignable to a group. **Default chart:** Add permissions shows *No permissions* — not a UI defect; configure allow list first | P1 | UI |
 | F-07 | Read-only user | **viewer** persona → Roles | List allowed; Create role hidden or UI 403. Viewer Groups create is D-12; IAM-reader POST is **API** I-04 | P1 | UI |
 | F-08 | Filter roles by name | **Filter by name** search | Table narrows to matching roles | P1 | UI |
 
@@ -670,6 +670,71 @@ Creating a user in Keycloak alone does **not** grant CoP permissions unless the 
 
 See also: `docs/operations/rbac-setup.md` (User and Group Management).
 
+### Custom role creation (F-06)
+
+Reference procedure for **F-06** (and copy-from-existing-role flows that reuse the same **Add permissions** step).
+
+By default, chart `rbac.roleCreateAllowList` is **empty** (`cost-onprem/values.yaml`). The RBAC API then sets no `ROLE_CREATE_ALLOW_LIST` env var on the insights-rbac deployment. The Create role wizard calls:
+
+`GET /api/rbac/v1/permissions/?allowed_only=true&exclude_globals=true`
+
+With an empty allow list, `allowed_only=true` returns **zero** permissions — the UI correctly shows *No permissions*. This matches upstream SaaS behavior and is **not** a UI defect.
+
+#### Step 1 — Enable custom role creation in Helm
+
+1. Set `rbac.roleCreateAllowList` in the cluster values file (comma-separated application names):
+
+```yaml
+rbac:
+  roleCreateAllowList: "cost-management"
+```
+
+2. To allow IAM (`rbac`) permissions in custom roles as well (optional):
+
+```yaml
+rbac:
+  roleCreateAllowList: "cost-management,rbac"
+```
+
+3. `helm upgrade` the release and wait for the RBAC API deployment to roll out (`cost-onprem/templates/rbac/deployment-api.yaml` injects `ROLE_CREATE_ALLOW_LIST` only when this value is non-empty).
+
+#### Step 2 — Verify API before UI
+
+As **admin**, confirm the permissions picker will have data:
+
+```bash
+# Through the UI origin (session cookie) or gateway with admin JWT:
+curl -sk -b cookies.txt \
+  'https://<ui-host>/api/rbac/v1/permissions/?limit=20&allowed_only=true&exclude_globals=true&application=cost-management'
+```
+
+Expect `meta.count > 0` and a non-empty `data` array. If `count` is `0`, the allow list is still unset or the RBAC API pod has not picked up the new env var.
+
+Also check application filter options:
+
+`GET /api/rbac/v1/permissions/options/?field=application&allowed_only=true` → should list at least `cost-management`.
+
+**Note:** `exclude_globals=true` hides wildcard rows (e.g. `cost-management:*:*`). Pick a concrete permission such as `cost-management:openshift.cluster:read` for the wizard test.
+
+#### Step 3 — Run F-06 in the UI
+
+1. Log in as **admin** → **Roles** → **Create role**.
+2. Step 1: unique name (`TEST-<date>-custom-role`), description, **Create a role from scratch** (or copy an existing role).
+3. Step 2 **Add permissions**: table lists permissions; select at least one → **Next**.
+4. Step 3 **Review** → save.
+5. Confirm the role appears in the Roles list and can be assigned to a test group (prefix `TEST-*`).
+
+#### Step 4 — Cleanup
+
+Delete UI-created test roles via the Roles list actions menu, or inspect with:
+
+```bash
+kubectl exec -n cost-onprem deploy/insights-rbac -- \
+  python manage.py shell -c "from management.models import Role; print([r.name for r in Role.objects.filter(name__startswith='TEST-')])"
+```
+
+**Without Helm change:** custom roles can still be created via Django shell in the RBAC pod (bypasses API allow-list validation). See `docs/operations/rbac-setup.md` — that path is out of scope for F-06 UI testing.
+
 ---
 
 ## 14. Test risks & mitigations
@@ -680,7 +745,7 @@ See also: `docs/operations/rbac-setup.md` (User and Group Management).
 | Keycloak federation flakiness during LDAP sync | Medium | High | Isolated test realm; snapshot/restore scripts; document sync intervals |
 | RBAC cache stale reads cause false negatives | Medium | Medium | Document cache TTL (300s); add forced cache-clear tests; log timestamps |
 | Browser compatibility issues (Firefox/Edge) | Low | Medium | Test on Chrome 120+, Firefox 115+, Edge 120+ per browser matrix |
-| Concurrent admin edits cause race conditions | Medium | High | Test D-14 explicitly; document conflict resolution strategy |
+| Concurrent admin edits cause race conditions | Medium | High | Exercise D-05–D-09 under parallel admin sessions; document conflict resolution strategy |
 | Large dataset pagination breaks on 1000+ items | Low | High | Manual/UI check J-05; monitor prod for dataset growth |
 | Test data pollution between runs | Medium | Medium | Mandatory cleanup script in CI; `TEST-*` prefix enforcement |
 
@@ -720,6 +785,7 @@ Maps COST-7654 POC acceptance criteria to test case coverage:
 | User detail 404 for listed usernames | E-03 fails: list links to `/users/detail/{username}` but page is "User not found" | Confirm `/api/rbac/v1/principals/?usernames=` still 200; treat as UI defect | Live 2026-08-27 |
 | Users Status/Org Admin columns unused | All lab principals **Inactive** and Org. Administrator **No** (including admin) | Do not assert SaaS-style Active/checkmark; G-01 badge is the org-admin signal | Live 2026-08-27 |
 | Dummy principal profile fields | first/last/email are `foo`/`bar`/`baz` | Do not assert real names/emails | Keycloak→RBAC sync |
+| Create role — empty Add permissions picker | F-06 blocked on default installs: `rbac.roleCreateAllowList` empty → `allowed_only=true` returns 0 rows | Set `rbac.roleCreateAllowList: "cost-management"` (see **§13 Custom role creation**) before F-06; not a UI defect | By design (chart default) |
 
 **Future improvements**: Track in backlog; revisit quarterly.
 
